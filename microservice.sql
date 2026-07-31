@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS `account` (
     department_id   INT UNSIGNED NOT NULL,
     FOREIGN KEY (department_id) REFERENCES department(id)
 );
-
+----
 -- =============================================
 -- INSERT DATA
 -- =============================================
