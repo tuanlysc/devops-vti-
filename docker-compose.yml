@@ -1,52 +1,55 @@
-services:
-  department-service:
-    image: department-service:v1
-    ports:
-      - '${APP_PORT}:${APP_PORT}'
-    environment:
-      - APP_PORT=${APP_PORT}
-      - DB_URL=${DB_URL}
-      - DB_USERNAME=${DB_USERNAME}
-      - DB_PASSWORD=${DB_PASSWORD}
-    restart: always
-
-version: '3.8'
-
 #services:
-#  mysql-db:
-#    image: mysql:8.0
-#    container_name: mysql-db
-#    restart: always
-#    environment:
-#      MYSQL_ROOT_PASSWORD: root
-#      MYSQL_DATABASE: department_db
-#      MYSQL_USER: root
-#      MYSQL_PASSWORD: root
-#    ports:
-#      - '3306:3306'
-#    volumes:
-#      # Tự động thực thi file SQL khi container khởi chạy lần đầu
-#      - ./microservice.sql:/docker-entrypoint-initdb.d/microservice.sql
-#      # Luu trữ dữ liệu bền vững không bị mất khi restart container
-#      - mysql_data:/var/lib/mysql
-#    healthcheck:
-#      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-#      timeout: 5s
-#      retries: 10
-#
 #  department-service:
 #    image: department-service:v1
 #    ports:
 #      - '${APP_PORT}:${APP_PORT}'
 #    environment:
 #      - APP_PORT=${APP_PORT}
-#      - DB_URL=jdbc:mysql://mysql-db:3306/department_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-#      - DB_USERNAME=tuan_user
-#      - DB_PASSWORD=tuan_password
-#    depends_on:
-#      mysql-db:
-#        condition: service_healthy
+#      - DB_URL=${DB_URL}
+#      - DB_USERNAME=${DB_USERNAME}
+#      - DB_PASSWORD=${DB_PASSWORD}
 #    restart: always
 #
-#volumes:
-#  mysql_data:
+#version: '3.8'
+
+services:
+  mysql-db:
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: department_db
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+    ports:
+      - '3306:3306'
+    volumes:
+      # Tự động thực thi file SQL khi container khởi chạy lần đầu
+      - ./microservice.sql:/docker-entrypoint-initdb.d/microservice.sql
+      # Lưu trữ dữ liệu bền vững, không mất khi restart container
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 5s
+      retries: 10
+
+  department-service:
+    image: department-service:v1
+    container_name: department-service
+    ports:
+      - '${APP_PORT}:${APP_PORT}'
+    environment:
+      - APP_PORT=${APP_PORT}
+      - DB_URL=jdbc:mysql://mysql-db:3306/department_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  mysql-data:
+
+version: '3.8'
