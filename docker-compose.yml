@@ -20,19 +20,17 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: department_db
-      MYSQL_USER: root
-      MYSQL_PASSWORD: root
     ports:
       - '3306:3306'
     volumes:
-      # Tự động thực thi file SQL khi container khởi chạy lần đầu
       - ./microservice.sql:/docker-entrypoint-initdb.d/microservice.sql
-      # Lưu trữ dữ liệu bền vững, không mất khi restart container
       - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 5s
       retries: 10
+      interval: 5s
+      start_period: 30s
 
   department-service:
     image: department-service:v1
