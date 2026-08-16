@@ -1,73 +1,90 @@
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mysql-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mysql
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: mysql
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      containers:
-        - name: mysql
-          image: mysql:8.0
-          ports:
-            - containerPort: 3306
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: MYSQL_ROOT_PASSWORD
-            - name: MYSQL_DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: mysql-secret
-                  key: MYSQL_DATABASE
-          volumeMounts:
-            - name: mysql-storage
-              mountPath: /var/lib/mysql
-          readinessProbe:
-            exec:
-              command: ["mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)"]
-            initialDelaySeconds: 15
-            periodSeconds: 5
-            timeoutSeconds: 3
-          livenessProbe:
-            exec:
-              command: ["mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
-      volumes:
-        - name: mysql-storage
-          persistentVolumeClaim:
-            claimName: mysql-pvc
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mysql-service
-spec:
-  type: ClusterIP
-  selector:
-    app: mysql
-  ports:
-    - port: 3306
-      targetPort: 3306
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - develop
+      - production
+
+env:
+  IMAGE_NAME: department-service
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: [self-hosted]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Maven
+        run: mvn clean package -DskipTests
+
+      - name: Build Docker image
+        run: docker build -t $IMAGE_NAME:$IMAGE_TAG .
+
+  deploy-develop:
+    runs-on: [self-hosted]
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment: develop
+
+    env:
+      APP_PORT: ${{ secrets.APP_PORT }}
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Stop and Remove Existing Containers
+        run: docker compose down || true
+
+      - name: Run with Docker Compose
+        run: docker compose up -d
+
+  deploy-production:
+    runs-on: [self-hosted]
+    needs: build
+    if: github.ref == 'refs/heads/production'
+    environment: production
+
+    env:
+      APP_PORT: ${{ secrets.APP_PORT }}
+      DB_URL: ${{ secrets.DB_URL }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Load image into Minikube
+        run: minikube image load $IMAGE_NAME:$IMAGE_TAG
+
+      - name: Create or update Kubernetes secret
+        run: |
+          kubectl create secret generic department-service-secret \
+            --from-literal=APP_PORT="$APP_PORT" \
+            --from-literal=DB_URL="$DB_URL" \
+            --from-literal=DB_USERNAME="$DB_USERNAME" \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Render Kubernetes manifests
+        run: |
+          envsubst < k8s/deployment.yaml > k8s/deployment-rendered.yaml
+          envsubst < k8s/service.yaml > k8s/service-rendered.yaml
+
+      - name: Deploy to Minikube
+        run: |
+          kubectl apply -f k8s/deployment-rendered.yaml
+          kubectl apply -f k8s/service-rendered.yaml
+
+      - name: Restart deployment
+        run: |
+          kubectl rollout restart deployment/department-service
+          kubectl rollout status deployment/department-service
