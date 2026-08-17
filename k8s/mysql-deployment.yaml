@@ -44,6 +44,10 @@ spec:
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
+
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+
           readinessProbe:
             exec:
               command: ["mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$(MYSQL_ROOT_PASSWORD)"]
@@ -59,6 +63,10 @@ spec:
         - name: mysql-storage
           persistentVolumeClaim:
             claimName: mysql-pvc
+
+        - name: init-sql
+          configMap:
+            name: mysql-init-sql
 ---
 apiVersion: v1
 kind: Service
@@ -71,3 +79,4 @@ spec:
   ports:
     - port: 3306
       targetPort: 3306
+
